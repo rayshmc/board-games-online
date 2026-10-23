@@ -1,10 +1,10 @@
-<!-- #region CELL 1: MAIN CONTAINER & APP HEADER -->
+<!-- #region CELL 1: 主頁面結構與導覽列 -->
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>線上棋類大廳 - Board Games Online</title>
+  <title>線上棋類大廳</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,34 +13,135 @@
       <div class="logo-area" id="btn-home">
         <h2>線上棋類大廳</h2>
       </div>
-      <button id="btn-back-menu" class="btn-secondary hidden">← 返回大廳</button>
+      <button id="btn-back-menu" class="btn-secondary hidden">返回大廳</button>
     </header>
 <!-- #endregion -->
 
-<!-- #region CELL 2: GAME HUB MENU LOBBY -->
+<!-- #region CELL 2: 主選單大廳 -->
     <main id="game-menu" class="view-section">
       <h2 class="menu-title">請選擇遊戲</h2>
       <div class="game-grid">
-        <!-- 中國象棋卡片 -->
         <div class="game-card" data-game="chinese-chess">
-          <div class="card-icon">🪨</div>
+          <div class="card-icon">象棋</div>
           <h3>中國象棋</h3>
-          <p>傳統對弈，單機雙人 / Web Audio 語音音效與完整規則</p>
-          <button class="btn-primary">開始遊戲</button>
+          <p>傳統對弈，單機雙人 / 內建音效與完整規則</p>
+          <button class="btn-primary">進入遊戲</button>
         </div>
 
-        <!-- 圍棋 (預留擴充卡片) -->
         <div class="game-card disabled" data-game="go">
-          <div class="card-icon">⚪⚫</div>
-          <h3>圍棋 (Go)</h3>
-          <p>縱橫十九路，黑白對決 (即將推出)</p>
+          <div class="card-icon">圍棋</div>
+          <h3>圍棋</h3>
+          <p>縱橫十九路，黑白對決（即將推出）</p>
           <button class="btn-disabled" disabled>開發中</button>
         </div>
       </div>
     </main>
 <!-- #endregion -->
 
-<!-- #region CELL 3: CHINESE CHESS GAME VIEW -->
+<!-- #region CELL 3: 象棋模式子選單、線上大廳、對局室與人數顯示 -->
+    <section id="chess-mode-menu" class="view-section hidden">
+      <h2 class="menu-title">選擇中國象棋對戰模式</h2>
+      <div class="mode-grid">
+        <div class="mode-card" data-mode="local-pvp">
+          <h3>本機雙人對弈</h3>
+          <p>同機對戰，輪流執子，棋盤自動旋轉翻轉</p>
+          <button class="btn-primary">開始對戰</button>
+        </div>
+
+        <div class="mode-card" data-mode="online-pvp">
+          <h3>線上聯機對戰</h3>
+          <p>建立或加入線上房間，即時對弈與狀態偵測</p>
+          <button class="btn-primary">進入大廳</button>
+        </div>
+
+        <div class="mode-card disabled" data-mode="local-pve">
+          <h3>人機對戰</h3>
+          <p>挑戰人工智慧高段位棋力（匠心研發中）</p>
+          <button class="btn-disabled" disabled>開發中</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 線上大廳與房間瀏覽視圖 -->
+    <section id="view-online-lobby" class="view-section hidden">
+      <div class="online-lobby-wrapper">
+        <div class="lobby-header">
+          <h2>線上對戰大廳</h2>
+          <div class="user-info-box">
+            <div id="online-count-badge" class="online-badge">線上玩家: 0</div>
+            <span>當前玩家：<strong id="current-username-display">-</strong></span>
+            <button id="btn-change-username" class="btn-secondary">變更名稱</button>
+          </div>
+        </div>
+
+        <div class="lobby-actions">
+          <button id="btn-create-room" class="btn-primary">建立新對局桌</button>
+        </div>
+
+        <div class="room-browser">
+          <h3>對局桌列表</h3>
+          <div id="room-list-container" class="room-list">
+            <!-- 動態載入房間 -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 房間內部視圖 -->
+    <section id="view-room-room" class="view-section hidden">
+      <div class="online-lobby-wrapper">
+        <div class="lobby-header">
+          <h2 id="room-title-display">對局桌</h2>
+          <button id="btn-leave-room" class="btn-secondary">離開對局桌</button>
+        </div>
+
+        <div class="room-players-info">
+          <div class="player-slot">
+            <h4>紅方</h4>
+            <p id="host-name-display">等待加入</p>
+            <span id="host-status" class="opponent-status offline">離線</span>
+            <button id="btn-join-red" class="btn-primary" style="margin-top: 8px; padding: 6px 12px; font-size: 0.85rem;">選擇紅方</button>
+          </div>
+          <div style="display: flex; align-items: center; font-weight: bold; color: #ffd700;">VS</div>
+          <div class="player-slot">
+            <h4>黑方</h4>
+            <p id="guest-name-display">等待加入</p>
+            <span id="guest-status" class="opponent-status offline">離線</span>
+            <button id="btn-join-black" class="btn-primary" style="margin-top: 8px; padding: 6px 12px; font-size: 0.85rem;">選擇黑方</button>
+          </div>
+        </div>
+
+                <div style="text-align: center; margin-top: 15px;">
+          <p id="room-status-tip" style="color: #ffd700; font-weight: bold;">請選擇您的陣營以開始對局...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 重新整理工作階段恢復提示彈窗 -->
+    <div id="session-modal" class="modal hidden">
+      <div class="modal-content">
+        <h3>發現先前的連線紀錄</h3>
+        <p id="session-tip-text">是否要恢復上次的身分繼續遊玩？</p>
+        <div style="display: flex; gap: 10px;">
+          <button id="btn-session-yes" class="btn-primary" style="flex: 1;">恢復身分</button>
+          <button id="btn-session-no" class="btn-secondary" style="flex: 1;">輸入新名稱</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 名稱輸入彈窗 -->
+    <div id="username-modal" class="modal hidden">
+      <div class="modal-content">
+        <h3>設定您的線上名稱</h3>
+        <p>請輸入您的暱稱</p>
+        <input type="text" id="username-input" placeholder="輸入暱稱..." maxlength="12">
+        <div id="username-error" class="error-msg hidden">此名稱已被其他人使用，請更換名稱</div>
+        <button id="btn-submit-username" class="btn-primary">確認進入</button>
+      </div>
+    </div>
+<!-- #endregion -->
+ 
+<!-- #region CELL 4: 象棋遊戲對戰視圖與互動控制按鈕 -->
     <section id="view-chinese-chess" class="view-section hidden">
       <div class="game-wrapper">
         <div class="game-header">
@@ -53,20 +154,26 @@
           <canvas id="chess-board"></canvas>
         </div>
 
-        <footer class="controls">
-          <button id="btn-restart" class="btn">重新開始</button>
-          <button id="btn-undo" class="btn">悔棋</button>
+                <footer class="controls">
+          <button id="btn-restart" class="btn">請求重開</button>
+          <button id="btn-undo" class="btn">請求悔棋</button>
+          <button id="btn-surrender" class="btn" style="background-color: #c62828;">認輸投降</button>
+          <button id="btn-draw" class="btn" style="background-color: #f57c00;">請求和棋</button>
         </footer>
       </div>
     </section>
-<!-- #endregion -->
 
-<!-- #region CELL 4: GO GAME VIEW (RESERVED) & SCRIPT LOAD -->
-    <section id="view-go" class="view-section hidden">
-      <div class="game-wrapper">
-        <h2>圍棋 (Go) 模組載入中...</h2>
+    <!-- 對手請求提示彈窗（悔棋 / 重開 / 和棋） -->
+    <div id="request-modal" class="modal hidden">
+      <div class="modal-content">
+        <h3 id="request-title">對手請求</h3>
+        <p id="request-message">對手向你發出了一個請求。</p>
+        <div style="display: flex; gap: 10px;">
+          <button id="btn-request-accept" class="btn-primary" style="flex: 1;">同意</button>
+          <button id="btn-request-decline" class="btn-secondary" style="flex: 1;">拒絕</button>
+        </div>
       </div>
-    </section>
+    </div>
   </div>
 
   <script type="module" src="main.js"></script>
