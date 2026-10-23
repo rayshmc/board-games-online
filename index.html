@@ -1,36 +1,75 @@
+<!-- #region CELL 1: MAIN CONTAINER & APP HEADER -->
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>中國象棋</title>
+  <title>線上棋類大廳 - Board Games Online</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- #region CELL 1: UI CONTAINER & STATUS BAR -->
-  <div class="game-wrapper">
-    <header class="game-header">
-      <h2>中國象棋</h2>
-      <div class="status-bar">
-        <span id="turn-indicator" class="turn red">紅方走棋</span>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="logo-area" id="btn-home">
+        <h2>線上棋類大廳</h2>
       </div>
+      <button id="btn-back-menu" class="btn-secondary hidden">← 返回大廳</button>
     </header>
+<!-- #endregion -->
 
-    <!-- #region CELL 2: CANVAS BOARD CONTAINER -->
-    <main class="board-container">
-      <canvas id="chess-board"></canvas>
+<!-- #region CELL 2: GAME HUB MENU LOBBY -->
+    <main id="game-menu" class="view-section">
+      <h2 class="menu-title">請選擇遊戲</h2>
+      <div class="game-grid">
+        <!-- 中國象棋卡片 -->
+        <div class="game-card" data-game="chinese-chess">
+          <div class="card-icon">🪨</div>
+          <h3>中國象棋</h3>
+          <p>傳統對弈，單機雙人 / Web Audio 語音音效與完整規則</p>
+          <button class="btn-primary">開始遊戲</button>
+        </div>
+
+        <!-- 圍棋 (預留擴充卡片) -->
+        <div class="game-card disabled" data-game="go">
+          <div class="card-icon">⚪⚫</div>
+          <h3>圍棋 (Go)</h3>
+          <p>縱橫十九路，黑白對決 (即將推出)</p>
+          <button class="btn-disabled" disabled>開發中</button>
+        </div>
+      </div>
     </main>
-    <!-- #endregion -->
+<!-- #endregion -->
 
-    <!-- #region CELL 3: CONTROL BUTTONS -->
-    <footer class="controls">
-      <button id="btn-restart" class="btn">重新開始</button>
-      <button id="btn-undo" class="btn">悔棋</button>
-    </footer>
-    <!-- #endregion -->
+<!-- #region CELL 3: CHINESE CHESS GAME VIEW -->
+    <section id="view-chinese-chess" class="view-section hidden">
+      <div class="game-wrapper">
+        <div class="game-header">
+          <div class="status-bar">
+            <span id="turn-indicator" class="turn red">紅方走棋</span>
+          </div>
+        </div>
+
+        <div class="board-container">
+          <canvas id="chess-board"></canvas>
+        </div>
+
+        <footer class="controls">
+          <button id="btn-restart" class="btn">重新開始</button>
+          <button id="btn-undo" class="btn">悔棋</button>
+        </footer>
+      </div>
+    </section>
+<!-- #endregion -->
+
+<!-- #region CELL 4: GO GAME VIEW (RESERVED) & SCRIPT LOAD -->
+    <section id="view-go" class="view-section hidden">
+      <div class="game-wrapper">
+        <h2>圍棋 (Go) 模組載入中...</h2>
+      </div>
+    </section>
   </div>
-  <!-- #endregion -->
 
-  <script type="module" src="game.js"></script>
+  <script type="module" src="main.js"></script>
 </body>
 </html>
+<!-- #endregion -->

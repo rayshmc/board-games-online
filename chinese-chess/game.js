@@ -217,5 +217,7 @@ class GameController {
   }
 }
 
-window.addEventListener('DOMContentLoaded', () => new GameController());
+export function initChessGame() {
+  return new GameController();
+}
 // #endregion

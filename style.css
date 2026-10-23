@@ -12,15 +12,140 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background-color: #2b3a2a;
   color: #ffffff;
-  display: flex;
-  justify-content: center;
-  align-items: center;
   min-height: 100vh;
-  overflow: hidden;
+  overflow-x: hidden;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.hidden {
+  display: none !important;
 }
 /* #endregion */
 
-/* #region CELL 2: HEADER & STATUS BAR STYLES */
+/* #region CELL 2: APP HEADER & HUB NAVIGATION */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background-color: #1e291d;
+  border-bottom: 1px solid #3b5039;
+}
+
+.logo-area {
+  cursor: pointer;
+}
+
+.btn-secondary {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background-color: #4a6348;
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-secondary:hover {
+  background-color: #3b5039;
+}
+/* #endregion */
+
+/* #region CELL 3: GAME MENU & CARD STYLES */
+.view-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.menu-title {
+  text-align: center;
+  margin-bottom: 24px;
+  color: #ffd700;
+  font-size: 1.8rem;
+}
+
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+  width: 100%;
+  max-width: 800px;
+}
+
+.game-card {
+  background: #3b5039;
+  border: 2px solid #4a6348;
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  transition: transform 0.2s, border-color 0.2s;
+  cursor: pointer;
+}
+
+.game-card:hover:not(.disabled) {
+  transform: translateY(-4px);
+  border-color: #ffd700;
+}
+
+.game-card.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.card-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+}
+
+.game-card h3 {
+  font-size: 1.4rem;
+  margin-bottom: 8px;
+}
+
+.game-card p {
+  font-size: 0.9rem;
+  color: #d1e0d0;
+  margin-bottom: 20px;
+}
+
+.btn-primary {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  background-color: #d32f2f;
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: #b71c1c;
+}
+
+.btn-disabled {
+  padding: 10px 20px;
+  background-color: #555;
+  color: #aaa;
+  border: none;
+  border-radius: 6px;
+  cursor: not-allowed;
+}
+/* #endregion */
+
+/* #region CELL 4: GAME VIEW & BOARD CONTAINER STYLES */
 .game-wrapper {
   display: flex;
   flex-direction: column;
@@ -36,7 +161,6 @@ body {
 }
 
 .status-bar {
-  margin-top: 6px;
   font-size: 1.1rem;
   font-weight: bold;
 }
@@ -54,9 +178,7 @@ body {
   60% { opacity: 1; }
   100% { opacity: 0.4; }
 }
-/* #endregion */
 
-/* #region CELL 3: CANVAS & BOARD CONTAINER STYLES */
 .board-container {
   width: 100%;
   aspect-ratio: 9 / 10;
@@ -75,9 +197,7 @@ canvas {
   display: block;
   border-radius: 8px;
 }
-/* #endregion */
 
-/* #region CELL 4: CONTROLS & BUTTON STYLES */
 .controls {
   display: flex;
   gap: 12px;
