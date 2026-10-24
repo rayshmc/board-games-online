@@ -82,6 +82,30 @@ async function fallbackNameIsUnique(name) {
   }
 }
 
+// Is this username currently held by a *different* live player? Used before
+// restoring a saved identity so we can warn the user up-front instead of
+// silently pushing them back into the generic "pick a name" form.
+async function isUsernameTakenOnline(name) {
+  if (!name) return false;
+  try {
+    const snapshot = await get(ref(db, 'online_users'));
+    if (!snapshot.exists()) return false;
+    const now = Date.now();
+    let taken = false;
+    snapshot.forEach(child => {
+      const user = child.val();
+      if (child.key === myUserId || !user) return;
+      if (user.username === name && now - (user.lastSeen || 0) < ONLINE_WINDOW_MS) {
+        taken = true;
+      }
+    });
+    return taken;
+  } catch (err) {
+    console.error('查詢線上名稱使用狀況失敗：', err);
+    return false;
+  }
+}
+
 async function releaseUsername(name) {
   if (!name) return;
   const key = encodeName(name);
@@ -133,31 +157,78 @@ export function initOnlineLobby() {
   const submitBtn = document.getElementById('btn-submit-username');
   const sessionTipText = document.getElementById('session-tip-text');
 
+  // Already identified during this page load (came back to the lobby from a
+  // room): skip the identity modals and just (re)attach the lobby listeners.
+  if (currentUsername) {
+    document.getElementById('current-username-display').textContent = currentUsername;
+    registerOnlinePresence();
+    initLobbyListeners();
+    setupRoomActionButtons();
+    return;
+  }
+
   const savedSession = localStorage.getItem('chess_session');
+
+  // The saved name is no longer ours: explain why and let the user pick a new
+  // one instead of dropping them into a blank name prompt with no explanation.
+  const warnRestoredNameUnavailable = (name) => {
+    currentUsername = '';
+    localStorage.removeItem('chess_session');
+    sessionModal.classList.add('hidden');
+    input.value = '';
+    input.placeholder = '請輸入新的暱稱...';
+    errorMsg.textContent = `上次使用的名稱「${name}」目前已有其他線上玩家使用，請建立新的名稱。`;
+    errorMsg.classList.remove('hidden');
+    usernameModal.classList.remove('hidden');
+    input.focus();
+  };
 
   if (savedSession) {
     const sessionData = JSON.parse(savedSession);
     sessionTipText.textContent = `是否要恢復上次的身分「${sessionData.username}」？`;
     sessionModal.classList.remove('hidden');
 
-    document.getElementById('btn-session-yes').onclick = async () => {
-      currentUsername = sessionData.username;
+    const yesBtn = document.getElementById('btn-session-yes');
+    yesBtn.onclick = async () => {
+      // Ignore extra taps while the availability check is in flight.
+      if (yesBtn.disabled) return;
+      const savedName = sessionData.username;
+      currentUsername = savedName;
       // NOTE: do NOT adopt sessionData.userId here. Each tab keeps its own
       // sessionStorage-scoped id; reusing the stored id across tabs would make
       // two tabs collide as the same online user. Identity is the username.
 
-      // Re-claim this name atomically. If it is held by a different live user
-      // (e.g. this same name is open in another tab), force a new name.
-      const ok = await claimUsername(currentUsername);
+      // Warn the user if another player is live with this name right now, then
+      // re-claim the name atomically as a second line of defence (it may still
+      // be reserved by a stale claim). Either way they must pick a new name.
+      const originalLabel = yesBtn.textContent;
+      yesBtn.disabled = true;
+      yesBtn.textContent = '檢查名稱中...';
+
+      const takenByLivePlayer = await isUsernameTakenOnline(savedName);
+      let ok = false;
+      if (!takenByLivePlayer) {
+        ok = await claimUsername(savedName);
+        if (!ok) {
+          // Nobody live is using the name, so the claim is probably only still
+          // reserved by our own previous session (the server-side onDisconnect
+          // cleanup can land a beat late after a reload). Retry once before
+          // telling the user the name is gone.
+          await new Promise(resolve => setTimeout(resolve, 800));
+          ok = !(await isUsernameTakenOnline(savedName)) && await claimUsername(savedName);
+        }
+      }
+
+      yesBtn.disabled = false;
+      yesBtn.textContent = originalLabel;
+
       if (!ok) {
-        currentUsername = '';
-        localStorage.removeItem('chess_session');
-        sessionModal.classList.add('hidden');
-        usernameModal.classList.remove('hidden');
+        warnRestoredNameUnavailable(savedName);
         return;
       }
 
       sessionModal.classList.add('hidden');
+      errorMsg.classList.add('hidden');
       document.getElementById('current-username-display').textContent = currentUsername;
       registerOnlinePresence();
       initLobbyListeners();
@@ -166,6 +237,7 @@ export function initOnlineLobby() {
     document.getElementById('btn-session-no').onclick = () => {
       localStorage.removeItem('chess_session');
       sessionModal.classList.add('hidden');
+      errorMsg.classList.add('hidden');
       usernameModal.classList.remove('hidden');
     };
   } else {
@@ -189,6 +261,7 @@ export function initOnlineLobby() {
     localStorage.setItem('chess_session', JSON.stringify({ username: currentUsername, userId: myUserId }));
 
     errorMsg.classList.add('hidden');
+    input.placeholder = '輸入暱稱...';
     usernameModal.classList.add('hidden');
     document.getElementById('current-username-display').textContent = currentUsername;
 
@@ -201,10 +274,19 @@ export function initOnlineLobby() {
     localStorage.removeItem('chess_session');
     currentUsername = '';
     input.value = '';
+    input.placeholder = '輸入暱稱...';
+    errorMsg.classList.add('hidden');
     usernameModal.classList.remove('hidden');
     // Free up the old name so it can be reused.
     await releaseUsername(oldName);
   };
+
+  // Once the player starts typing a different name, drop the "name is taken"
+  // warning so the form does not look like it is still rejecting them.
+  if (!input.dataset.warningBound) {
+    input.dataset.warningBound = '1';
+    input.addEventListener('input', () => errorMsg.classList.add('hidden'));
+  }
 
   document.getElementById('btn-create-room').onclick = () => {
     createNewRoom();
@@ -285,6 +367,7 @@ function renderRoomView(roomId, room) {
   } else {
     // Not in a live match: make sure the online game view is closed and we are
     // showing the room view (covers the post-game return-to-room transition).
+    document.body.classList.remove('online-chess');
     if (window.__onlineMatchStarted) {
       window.__onlineMatchStarted = null;
       if (typeof window.__teardownOnlineChess === 'function') window.__teardownOnlineChess();
@@ -298,6 +381,10 @@ async function startOnlineMatch(roomId, room, role) {
   if (window.__onlineMatchStarted === roomId + ':' + role) return;
   window.__onlineMatchStarted = roomId + ':' + role;
 
+  // Mark the page as online-chess so the wider layout (board + side record
+  // panel) can scale up without squeezing the board on desktops.
+  document.body.classList.add('online-chess');
+
   try {
     if (typeof window.__launchOnlineChess === 'function') {
       await window.__launchOnlineChess({ roomId, ...room }, myUserId, role);
@@ -308,6 +395,7 @@ async function startOnlineMatch(roomId, room, role) {
   } catch (err) {
     console.error('啟動線上對局失敗：', err);
     window.__onlineMatchStarted = null;
+    document.body.classList.remove('online-chess');
   }
 }
 
@@ -327,6 +415,9 @@ function setupRoomActionButtons() {
 // instead of being forced back to the lobby. Spectators stay as spectators.
 function resetRoomAfterGame(roomId) {
   if (!roomId) return;
+  // The board is being closed: drop the online-only layout class so the lobby
+  // and local games do not inherit the widened online board layout.
+  document.body.classList.remove('online-chess');
   const roomRef = ref(db, `rooms/${roomId}`);
   update(roomRef, {
     redPlayer: null,
@@ -418,6 +509,7 @@ function joinSeat(color) {
 
 function handleLeaveRoom(skipNavigation = false) {
   stopRoomHeartbeat();
+  document.body.classList.remove('online-chess');
   if (roomUnsubscribe) {
     roomUnsubscribe();
     roomUnsubscribe = null;

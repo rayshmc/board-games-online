@@ -26,9 +26,16 @@ class GameController {
     this.init();
   }
 
-  init() {
-    window.addEventListener('resize', () => this.render());
-    this.canvas.addEventListener('click', (e) => this.handleClick(e));
+    init() {
+    // Keep references to the bound listeners so teardown() can remove them.
+    // The canvas / buttons are shared by every controller instance, so a
+    // controller that is replaced must never keep listening (otherwise a click
+    // would be handled twice — once per stale controller).
+    this._onResize = () => this.render();
+    this._onCanvasClick = (e) => this.handleClick(e);
+
+    window.addEventListener('resize', this._onResize);
+    this.canvas.addEventListener('click', this._onCanvasClick);
 
     this.attachLocalActionHandlers();
 
@@ -39,9 +46,38 @@ class GameController {
   // Local (hotseat) controls. Online mode overrides these via initOnlineActions().
   attachLocalActionHandlers() {
     const btnRestart = document.getElementById('btn-restart');
+        const btnUndo = document.getElementById('btn-undo');
+    if (btnRestart) {
+      this._onRestartClick = () => this.restart();
+      btnRestart.addEventListener('click', this._onRestartClick);
+    }
+    if (btnUndo) {
+      this._onUndoClick = () => this.undo();
+      btnUndo.addEventListener('click', this._onUndoClick);
+    }
+  }
+
+  // Detach every listener this controller installed. Called before the
+  // controller is discarded (switching between local and online play).
+  teardown() {
+    if (this._onResize) window.removeEventListener('resize', this._onResize);
+    if (this.canvas && this._onCanvasClick) {
+      this.canvas.removeEventListener('click', this._onCanvasClick);
+    }
+    const btnRestart = document.getElementById('btn-restart');
     const btnUndo = document.getElementById('btn-undo');
-    if (btnRestart) btnRestart.addEventListener('click', () => this.restart());
-    if (btnUndo) btnUndo.addEventListener('click', () => this.undo());
+    if (btnRestart && this._onRestartClick) {
+      btnRestart.removeEventListener('click', this._onRestartClick);
+    }
+    if (btnUndo && this._onUndoClick) {
+      btnUndo.removeEventListener('click', this._onUndoClick);
+    }
+    this._onRestartClick = null;
+    this._onUndoClick = null;
+    this.clearOverlay();
+    if (this.renderer && typeof this.renderer.destroy === 'function') {
+      this.renderer.destroy();
+    }
   }
 
     restart() {
@@ -621,13 +657,21 @@ export function initOnlineChessGame(roomData, userId, role) {
       }, 2600);
     }
 
-    // Detach all Firebase listeners so a finished board can be safely discarded
+        // Detach all Firebase listeners so a finished board can be safely discarded
     // when we return to the room view.
     teardown() {
       if (this._unsubscribers) {
         this._unsubscribers.forEach(fn => { try { fn(); } catch (e) {} });
         this._unsubscribers = [];
       }
+      // Drop the DOM listeners installed by the online controller (canvas click,
+      // resize, and the onclick handlers on the request buttons) so a returning
+      // local game does not fire two controllers at once.
+      ['btn-restart', 'btn-undo', 'btn-surrender', 'btn-draw'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.onclick = null;
+      });
+      super.teardown();
       this.clearOverlay();
     }
 
@@ -680,11 +724,19 @@ export function initOnlineChessGame(roomData, userId, role) {
       this._unsubscribers.push(unsubReq);
     }
 
-    scheduleRequestCleanup(ts) {
+        scheduleRequestCleanup(ts) {
       if (this._cleanupScheduledFor === ts) return;
       this._cleanupScheduledFor = ts;
       setTimeout(() => {
-        remove(ref(getDatabase(), `rooms/${this.roomId}/request`)).catch(() => {});
+        const requestRef = ref(getDatabase(), `rooms/${this.roomId}/request`);
+        // Re-check before deleting: a NEW request may have been written during
+        // the delay, and blind-removing the node would silently drop it.
+        get(requestRef).then(snap => {
+          const current = snap.val();
+          if (current && current.ts === ts) {
+            remove(requestRef).catch(() => {});
+          }
+        }).catch(() => {});
         this._requestShownFor = null;
         this._cleanupScheduledFor = null;
       }, 1500);
@@ -855,12 +907,22 @@ export function initOnlineChessGame(roomData, userId, role) {
         const clone = el.cloneNode(true);
         el.parentNode.replaceChild(clone, el);
         return clone;
-      };
+
+
+            };
       const restartEl = stripListeners(btnRestart);
       const undoEl = stripListeners(btnUndo);
       const surrenderEl = stripListeners(btnSurrender);
 
-      if (this.role === 'spectator') {
+      // 認輸 / 和棋 buttons only make sense online, so they are hidden in the
+      // shared markup and revealed here for the players in this match.
+      [surrenderEl, btnDraw].forEach(el => {
+        if (el) el.classList.remove('hidden');
+      });
+
+            if (this.role === 'spectator') {
+        // Spectators cannot act at all — hide the extra buttons entirely.
+        [surrenderEl, btnDraw].forEach(el => { if (el) el.classList.add('hidden'); });
         if (restartEl) restartEl.disabled = true;
         if (undoEl) undoEl.disabled = true;
         if (surrenderEl) surrenderEl.disabled = true;
@@ -904,7 +966,7 @@ export function initOnlineChessGame(roomData, userId, role) {
         }
       };
 
-      btnDraw.onclick = () => {
+            if (btnDraw) btnDraw.onclick = () => {
         if (this.isGameOver) { showToast('本局已結束。'); return; }
         if (confirm('確定要向對手發送「請求和棋」嗎？')) {
           this.sendRequest('draw');

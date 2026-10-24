@@ -1,5 +1,8 @@
 // #region CELL 1: 路由管理與畫面切換控制
 let activeChessGame = null;
+// Separate handle for the local (hotseat) controller so it can be torn down
+// even after `activeChessGame` has been taken over by an online controller.
+let localChessGame = null;
 
 const menuSection = document.getElementById('game-menu');
 const modeMenuSection = document.getElementById('chess-mode-menu');
@@ -19,18 +22,21 @@ function showMainLobby() {
   hideAllViews();
   menuSection.classList.remove('hidden');
   btnBackMenu.classList.add('hidden');
+  document.body.classList.remove('online-chess');
 }
 
 function showChessModeMenu() {
   hideAllViews();
   modeMenuSection.classList.remove('hidden');
   btnBackMenu.classList.remove('hidden');
+  document.body.classList.remove('online-chess');
 }
 
 function showOnlineLobby() {
   hideAllViews();
   onlineLobbySection.classList.remove('hidden');
   btnBackMenu.classList.remove('hidden');
+  document.body.classList.remove('online-chess');
 }
 
 function showRoomView() {
@@ -46,11 +52,20 @@ async function launchChineseChessLocalPvP() {
   chessSection.classList.remove('hidden');
   btnBackMenu.classList.remove('hidden');
 
+  // Local hotseat is not an online board: drop the online-only layout class.
+  document.body.classList.remove('online-chess');
+
     // Hide online-only UI (player names + move record) when playing locally.
     const nameBar = document.getElementById('player-name-bar');
     const recPanel = document.getElementById('move-record-panel');
     if (nameBar) nameBar.classList.add('hidden');
     if (recPanel) recPanel.classList.add('hidden');
+
+    // 認輸 / 和棋 only exist for online games.
+    ['btn-surrender', 'btn-draw'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
+    });
 
     // Clear any leftover online button handlers / disabled state so local play
     // isn't blocked or double-triggered after an online session.
@@ -69,12 +84,18 @@ async function launchChineseChessLocalPvP() {
     activeChessGame = null;
   }
 
-  if (!activeChessGame) {
-    const { initChessGame } = await import('./chinese-chess/game.js');
-    activeChessGame = initChessGame();
-  } else {
-    activeChessGame.restart();
+  // Dispose any previous LOCAL controller first: online mode clone-replaces the
+  // action buttons, so a stale controller would keep a dead listener (and its
+  // canvas click handler would fight the new one).
+  if (localChessGame) {
+    try { localChessGame.teardown(); } catch (e) { /* ignore */ }
+    localChessGame = null;
+    activeChessGame = null;
   }
+
+  const { initChessGame } = await import('./chinese-chess/game.js');
+  localChessGame = initChessGame();
+  activeChessGame = localChessGame;
 }
 // #endregion
 
@@ -140,6 +161,13 @@ export async function launchOnlineChess(roomData, userId, role) {
   if (typeof window.__teardownOnlineChess === 'function') {
     try { window.__teardownOnlineChess(); } catch (e) { /* ignore */ }
     window.__teardownOnlineChess = null;
+  }
+
+  // The local hotseat controller shares the same canvas / buttons, so dispose
+  // it before the online controller attaches its own listeners.
+  if (localChessGame) {
+    try { localChessGame.teardown(); } catch (e) { /* ignore */ }
+    localChessGame = null;
   }
 
   hideAllViews();

@@ -30,13 +30,25 @@ export class BoardRenderer {
       this.lastOpts.lastMove,
       this.lastOpts.checkingKingPos,
       this.lastOpts.overlayText,
-      this.lastOpts.overlayAlpha,
+            this.lastOpts.overlayAlpha,
       this.lastOpts.isGameOver,
       this.lastOpts.isFlipped
     );
   }
 
-    resize() {
+  // Release the ResizeObserver so a discarded renderer (e.g. the previous
+  // controller after switching between local and online play) stops redrawing
+  // the shared canvas.
+  destroy() {
+    if (this._ro) {
+      this._ro.disconnect();
+      this._ro = null;
+    }
+    this.lastBoard = null;
+    this.lastOpts = null;
+  }
+
+  resize() {
     const parent = this.canvas.parentElement;
     let width = parent ? parent.getBoundingClientRect().width : 0;
     // Fall back to an explicit width if the container has not been laid out yet.
