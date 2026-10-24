@@ -154,8 +154,34 @@ body {
   align-items: center;
   gap: 12px;
   width: 100%;
-  max-width: 540px;
-  padding: 10px;
+  /* Board-only mode (local hotseat) has no side move-record panel, so the board
+     can use most of the available height. 250px accounts for the header, status
+     bar, player names, controls, and padding/gaps around the board. The 820px
+     cap keeps the local board from becoming absurdly large on wide monitors. */
+  max-width: 560px;
+  max-width: max(400px, min(820px, calc((100vh - 250px) * 0.9)));
+  padding: 12px;
+}
+
+/* Prefer dynamic viewport height where supported, so mobile browser toolbars
+   don't push the board past the bottom of the screen. */
+@supports (height: 100dvh) {
+  .game-wrapper {
+    max-width: max(400px, min(820px, calc((100dvh - 250px) * 0.9)));
+  }
+}
+
+/* ONLINE mode: the wrapper hosts BOTH the board (9:10) and the side move-record
+   panel, so give it extra width to let the board scale up without squeezing the
+   record panel. The + 260px is the record panel width + gap; the 0.9 factor
+   keeps the board height in check so the whole layout still fits the viewport. */
+body.online-chess .game-wrapper {
+  max-width: max(400px, min(1240px, calc((100vh - 250px) * 0.9 + 260px)));
+}
+@supports (height: 100dvh) {
+  body.online-chess .game-wrapper {
+    max-width: max(400px, min(1240px, calc((100dvh - 250px) * 0.9 + 260px)));
+  }
 }
 
 .game-header {
@@ -163,7 +189,7 @@ body {
 }
 
 .status-bar {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   font-weight: bold;
 }
 
@@ -200,6 +226,9 @@ canvas {
   border-radius: 8px;
 }
 
+/* Request buttons (請求重開 / 悔棋 / 認輸 / 和棋).
+   min-height + centred layout gives comfortable tap targets on phones while the
+   type scale keeps growing on desktops. */
 .controls {
   display: flex;
   gap: 12px;
@@ -208,19 +237,55 @@ canvas {
 
 .btn {
   flex: 1;
-  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px;
+  padding: 12px 8px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background-color: #4a6348;
   color: #ffffff;
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: bold;
+  line-height: 1.2;
+  text-align: center;
   cursor: pointer;
+  white-space: nowrap;
   transition: background 0.2s;
 }
 
 .btn:active {
   background-color: #3b5039;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Medium screens (tablets / small laptops): grow the surrounding UI a bit so
+   labels and buttons don't look tiny next to a bigger board. */
+@media (min-width: 768px) {
+  .status-bar { font-size: 1.3rem; }
+  .btn {
+    min-height: 54px;
+    font-size: 1.12rem;
+  }
+}
+
+/* Large screens: grow the surrounding UI along with the board. */
+@media (min-width: 1100px) {
+  .game-wrapper { gap: 14px; }
+  .status-bar { font-size: 1.4rem; }
+  .turn.winner { font-size: 1.55rem; }
+  .player-name-bar { font-size: 1.15rem; }
+  .controls { gap: 16px; }
+  .btn {
+    min-height: 60px;
+    font-size: 1.2rem;
+    letter-spacing: 0.02em;
+  }
 }
 /* #endregion */
 
@@ -241,15 +306,22 @@ canvas {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
   border-bottom: 1px solid #4a6348;
   padding-bottom: 12px;
+}
+
+.lobby-header h2 {
+  font-size: 1.4rem;
 }
 
 .user-info-box {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 0.95rem;
+  flex-wrap: wrap;
+  font-size: 1.05rem;
 }
 
 .lobby-actions {
@@ -263,14 +335,18 @@ canvas {
   gap: 10px;
 }
 
+.room-browser h3 {
+  font-size: 1.25rem;
+}
+
 .room-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 300px;
+  gap: 10px;
+  max-height: 360px;
   overflow-y: auto;
   background: #2b3a2a;
-  padding: 10px;
+  padding: 12px;
   border-radius: 8px;
 }
 
@@ -278,10 +354,22 @@ canvas {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   background: #3b5039;
-  padding: 12px;
+  padding: 14px;
   border-radius: 6px;
   border: 1px solid #4a6348;
+}
+
+.room-item strong {
+  font-size: 1.15rem;
+}
+
+/* The room list is built via innerHTML with an inline 0.85rem meta line; bump
+   it up for readability on larger screens. */
+.room-item > div > div {
+  font-size: 0.95rem !important;
+  margin-top: 4px;
 }
 
 /* 對局室玩家 Slots 與間距優化 */
@@ -304,26 +392,54 @@ canvas {
 }
 
 .player-slot h4 {
-  font-size: 1.05rem;
+  font-size: 1.2rem;
   color: #ffd700;
 }
 
 .player-slot p {
-  font-size: 1rem;
+  font-size: 1.2rem;
   font-weight: bold;
   word-break: break-all;
   text-align: center;
 }
 
+/* Seat buttons ("選擇紅方" / "選擇黑方"). Previously styled via inline styles;
+   give them a real tap target so they're usable on phones. */
+.seat-btn {
+  margin-top: 10px;
+  min-height: 44px;
+  padding: 10px 20px;
+  font-size: 1rem;
+}
+
 .opponent-status {
-  font-size: 0.85rem;
-  padding: 4px 10px;
+  font-size: 0.95rem;
+  padding: 5px 12px;
   border-radius: 4px;
   margin-top: 4px;
   display: inline-block;
 }
 .opponent-status.online { background: #2e7d32; color: #fff; }
 .opponent-status.offline { background: #c62828; color: #fff; }
+
+.room-vs {
+  display: flex;
+  align-items: center;
+  font-weight: bold;
+  font-size: 1.1rem;
+  color: #ffd700;
+}
+
+.room-status-row {
+  text-align: center;
+  margin-top: 16px;
+}
+
+#room-status-tip {
+  font-size: 1.1rem;
+  color: #ffd700;
+  font-weight: bold;
+}
 
 /* 彈窗樣式 */
 .modal {
@@ -333,35 +449,61 @@ canvas {
   display: flex;
   justify-content: center;
   align-items: center;
+  padding: 16px;
   z-index: 1000;
 }
 
 .modal-content {
   background: #3b5039;
-  padding: 24px;
+  padding: 26px;
   border-radius: 12px;
   border: 2px solid #ffd700;
   display: flex;
   flex-direction: column;
   gap: 16px;
   width: 90%;
-  max-width: 400px;
+  max-width: 420px;
   text-align: center;
 }
 
+.modal-content h3 {
+  font-size: 1.35rem;
+}
+
+.modal-content p {
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
 .modal-content input {
-  padding: 10px;
+  padding: 12px;
   border-radius: 6px;
   border: 1px solid #4a6348;
   background: #2b3a2a;
   color: #fff;
-  font-size: 1rem;
+  font-size: 1.1rem;
   text-align: center;
+}
+
+/* The 悔棋 / 重開 / 和棋 request prompt: give the accept/decline buttons a
+   large, unambiguous tap target. */
+#request-modal .modal-content {
+  max-width: 440px;
+}
+
+#request-modal .modal-content button {
+  min-height: 52px;
+  font-size: 1.15rem;
+}
+
+#request-modal .request-actions {
+  display: flex;
+  gap: 12px;
 }
 
 .error-msg {
   color: #ff5252;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
 }
 /* #endregion */
 
@@ -369,9 +511,9 @@ canvas {
 .online-badge {
   background-color: #2e7d32;
   color: #ffffff;
-  padding: 4px 10px;
+  padding: 5px 12px;
   border-radius: 6px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: bold;
 }
 /* #endregion */
@@ -386,8 +528,8 @@ canvas {
   color: #ffd700;
   border: 1px solid #ffd700;
   border-radius: 8px;
-  padding: 12px 20px;
-  font-size: 0.95rem;
+    padding: 12px 20px;
+  font-size: 1rem;
   font-weight: bold;
   max-width: 86vw;
   text-align: center;
@@ -401,5 +543,133 @@ canvas {
 .game-toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+/* #endregion */
+
+/* #region CELL 9: 小螢幕 (手機) 相容性調整 */
+/* Compact chrome on small phones so the scaled-up board + request buttons
+   still fit without horizontal scrolling, while keeping >=44px tap targets. */
+@media (max-width: 480px) {
+  .app-header { padding: 10px 14px; }
+  .logo-area h2 { font-size: 1.1rem; }
+  .btn-secondary { padding: 8px 14px; font-size: 0.95rem; }
+  .view-section { padding: 12px; }
+  .game-wrapper { padding: 8px; gap: 10px; }
+  .online-lobby-wrapper { padding: 16px; }
+  .room-players-info { padding: 20px 10px; gap: 10px; }
+  .player-slot { min-width: 0; flex: 1; }
+  .room-item { flex-direction: column; align-items: stretch; }
+  .room-item button { width: 100%; min-height: 46px; }
+  .modal-content { padding: 20px; }
+
+  /* Four request buttons in one row are cramped on a phone — use a 2x2 grid. */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .btn { min-height: 50px; font-size: 1rem; }
+}
+/* #endregion */
+
+/* #region CELL 8: 線上對局玩家名稱列與棋譜記錄 */
+.player-name-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+.player-name-bar.hidden { display: none; }
+.player-name-bar .pname {
+  padding: 4px 14px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+}
+.player-name-bar .red-side { color: #ff5252; }
+.player-name-bar .black-side { color: #4db6ac; }
+.player-name-bar .vs { color: #ffd700; }
+.player-name-bar .pname.me {
+  outline: 2px solid #ffd700;
+}
+.player-name-bar .pname.me::after {
+  content: '（你）';
+  font-size: 0.85rem;
+  color: #ffd700;
+}
+
+.board-and-record {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  min-height: 0;
+}
+.board-and-record .board-container {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+/* Move-record side panel. Width scales with the board via a min/clamp so it
+   stays readable on desktops without eating the board on smaller screens. */
+.move-record-panel {
+  flex: 0 0 170px;
+  max-height: 62vh;
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid #5c4033;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.move-record-panel.hidden { display: none; }
+.move-record-title {
+  padding: 10px;
+  font-weight: bold;
+  color: #ffd700;
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid #5c4033;
+  text-align: center;
+  font-size: 1.05rem;
+}
+.move-record-list {
+  padding: 8px 10px;
+  overflow-y: auto;
+  font-family: "Kaiti SC", "KaiTi", monospace;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: #eee;
+}
+.move-record-list .mv-row {
+  display: grid;
+  grid-template-columns: 2.4em 1fr 1fr;
+  gap: 6px;
+  white-space: nowrap;
+}
+.move-record-list .mv-no { color: #999; }
+.move-record-list .mv-red { color: #ff8a80; }
+.move-record-list .mv-black { color: #80cbc4; }
+
+/* Tablets / desktops: widen the record panel alongside the larger board. */
+@media (min-width: 1100px) {
+  .move-record-panel { flex: 0 0 220px; max-height: 70vh; }
+  .move-record-title { font-size: 1.15rem; }
+  .move-record-list { font-size: 1.15rem; }
+}
+
+/* Narrow screens: stack the record panel UNDER the board full-width. */
+@media (max-width: 720px) {
+  .board-and-record { flex-direction: column; align-items: center; }
+  .move-record-panel {
+    flex: 0 0 auto;
+    width: 100%;
+    max-height: 24vh;
+  }
+  .move-record-list { font-size: 1rem; }
 }
 /* #endregion */

@@ -95,24 +95,26 @@
           <button id="btn-leave-room" class="btn-secondary">離開對局桌</button>
         </div>
 
-        <div class="room-players-info">
+                <div class="room-players-info">
           <div class="player-slot">
             <h4>紅方</h4>
             <p id="host-name-display">等待加入</p>
             <span id="host-status" class="opponent-status offline">離線</span>
-            <button id="btn-join-red" class="btn-primary" style="margin-top: 8px; padding: 6px 12px; font-size: 0.85rem;">選擇紅方</button>
+            <button id="btn-join-red" class="btn-primary seat-btn">選擇紅方</button>
           </div>
-          <div style="display: flex; align-items: center; font-weight: bold; color: #ffd700;">VS</div>
+
+          <div class="room-vs">VS</div>
+
           <div class="player-slot">
             <h4>黑方</h4>
             <p id="guest-name-display">等待加入</p>
             <span id="guest-status" class="opponent-status offline">離線</span>
-            <button id="btn-join-black" class="btn-primary" style="margin-top: 8px; padding: 6px 12px; font-size: 0.85rem;">選擇黑方</button>
+            <button id="btn-join-black" class="btn-primary seat-btn">選擇黑方</button>
           </div>
         </div>
 
-                <div style="text-align: center; margin-top: 15px;">
-          <p id="room-status-tip" style="color: #ffd700; font-weight: bold;">請選擇您的陣營以開始對局...</p>
+        <div class="room-status-row">
+          <p id="room-status-tip">請選擇您的陣營以開始對局...</p>
         </div>
       </div>
     </section>
@@ -142,23 +144,35 @@
 <!-- #endregion -->
  
 <!-- #region CELL 4: 象棋遊戲對戰視圖與互動控制按鈕 -->
-    <section id="view-chinese-chess" class="view-section hidden">
+        <section id="view-chinese-chess" class="view-section hidden">
       <div class="game-wrapper">
         <div class="game-header">
           <div class="status-bar">
             <span id="turn-indicator" class="turn red">紅方走棋</span>
           </div>
+          <!-- Online player name bar (hidden in local mode) -->
+          <div id="player-name-bar" class="player-name-bar hidden">
+            <span id="name-red" class="pname red-side">紅方</span>
+            <span class="pname vs">VS</span>
+            <span id="name-black" class="pname black-side">黑方</span>
+          </div>
         </div>
 
-        <div class="board-container">
-          <canvas id="chess-board"></canvas>
+        <div class="board-and-record">
+          <div class="board-container">
+            <canvas id="chess-board"></canvas>
+          </div>
+
+          <!-- Traditional move record (中式記譜) -->
+          <div id="move-record-panel" class="move-record-panel hidden">
+            <div class="move-record-title">棋譜記錄</div>
+            <div id="move-record-list" class="move-record-list"></div>
+          </div>
         </div>
 
                 <footer class="controls">
           <button id="btn-restart" class="btn">請求重開</button>
           <button id="btn-undo" class="btn">請求悔棋</button>
-          <button id="btn-surrender" class="btn" style="background-color: #c62828;">認輸投降</button>
-          <button id="btn-draw" class="btn" style="background-color: #f57c00;">請求和棋</button>
         </footer>
       </div>
     </section>
@@ -168,7 +182,10 @@
       <div class="modal-content">
         <h3 id="request-title">對手請求</h3>
         <p id="request-message">對手向你發出了一個請求。</p>
-        <div style="display: flex; gap: 10px;">
+
+
+
+                <div class="request-actions">
           <button id="btn-request-accept" class="btn-primary" style="flex: 1;">同意</button>
           <button id="btn-request-decline" class="btn-secondary" style="flex: 1;">拒絕</button>
         </div>

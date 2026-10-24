@@ -46,6 +46,29 @@ async function launchChineseChessLocalPvP() {
   chessSection.classList.remove('hidden');
   btnBackMenu.classList.remove('hidden');
 
+    // Hide online-only UI (player names + move record) when playing locally.
+    const nameBar = document.getElementById('player-name-bar');
+    const recPanel = document.getElementById('move-record-panel');
+    if (nameBar) nameBar.classList.add('hidden');
+    if (recPanel) recPanel.classList.add('hidden');
+
+    // Clear any leftover online button handlers / disabled state so local play
+    // isn't blocked or double-triggered after an online session.
+    ['btn-restart', 'btn-undo', 'btn-surrender', 'btn-draw'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.onclick = null; el.disabled = false; }
+    });
+
+  // If the previous game was an ONLINE controller, tear it down and start a
+  // fresh local controller (the online one locks input to a single colour).
+  if (activeChessGame && activeChessGame.roomId) {
+    if (typeof window.__teardownOnlineChess === 'function') {
+      try { window.__teardownOnlineChess(); } catch (e) { /* ignore */ }
+    }
+    window.__teardownOnlineChess = null;
+    activeChessGame = null;
+  }
+
   if (!activeChessGame) {
     const { initChessGame } = await import('./chinese-chess/game.js');
     activeChessGame = initChessGame();
@@ -111,6 +134,14 @@ export function returnToOnlineLobby() {
 }
 
 export async function launchOnlineChess(roomData, userId, role) {
+  // If a previous online game controller is still alive (e.g. a rematch started
+  // very quickly after the last game ended), tear it down first so we don't
+  // stack duplicate Firebase listeners on the same room.
+  if (typeof window.__teardownOnlineChess === 'function') {
+    try { window.__teardownOnlineChess(); } catch (e) { /* ignore */ }
+    window.__teardownOnlineChess = null;
+  }
+
   hideAllViews();
   chessSection.classList.remove('hidden');
   btnBackMenu.classList.remove('hidden');

@@ -342,7 +342,8 @@ function resetRoomAfterGame(roomId) {
     turn: RED,
     lastMove: null,
     moveCount: 0,
-    history: []
+    history: [],
+    moves: []
   }).catch(err => console.error('重置棋盤失敗：', err));
 
   // Also drop any pending request so it can't leak into the next game.

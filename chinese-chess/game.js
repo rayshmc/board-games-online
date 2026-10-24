@@ -2,6 +2,7 @@
 import { getInitialBoard, isValidMoveStrict, isInCheck, getAllLegalMoves, RED, BLACK } from './rules.js';
 import { BoardRenderer } from './board.js';
 import { sounds } from './audio.js';
+import { moveToNotation } from './notation.js';
 
 class GameController {
   constructor() {
@@ -14,6 +15,7 @@ class GameController {
     this.selected = null;
     this.lastMove = null;
     this.history = [];
+    this.moves = [];            // list of notation strings, one per ply
     this.isGameOver = false;
 
     this.overlayText = null;
@@ -42,16 +44,18 @@ class GameController {
     if (btnUndo) btnUndo.addEventListener('click', () => this.undo());
   }
 
-  restart() {
+    restart() {
     this.board = getInitialBoard();
     this.turn = RED;
     this.selected = null;
     this.lastMove = null;
     this.history = [];
+    this.moves = [];
     this.isGameOver = false;
     this.clearOverlay();
     this.updateStatus();
     this.render();
+    this.renderMoveRecord();
   }
 
   undo() {
@@ -62,9 +66,11 @@ class GameController {
     this.lastMove = lastState.lastMove;
     this.selected = null;
     this.isGameOver = false;
+    if (this.moves.length > 0) this.moves.pop();
     this.clearOverlay();
     this.updateStatus();
     this.render();
+    this.renderMoveRecord();
   }
 
     clearOverlay() {
@@ -149,12 +155,17 @@ class GameController {
     this.render();
   }
 
-  makeMove(from, to) {
+    makeMove(from, to) {
     this.history.push({
       board: JSON.parse(JSON.stringify(this.board)),
       turn: this.turn,
       lastMove: this.lastMove
     });
+
+    // Record this move in traditional notation BEFORE mutating the board.
+    const notation = moveToNotation(this.board, from, to);
+    this._lastNotation = notation;
+    if (notation) this.moves.push(notation);
 
     const targetPiece = this.board[to.row][to.col];
     const piece = this.board[from.row][from.col];
@@ -174,6 +185,7 @@ class GameController {
 
     this.checkGameState();
     this.render();
+    this.renderMoveRecord();
   }
 // #endregion
 
@@ -241,6 +253,43 @@ class GameController {
     return null;
   }
 
+    // Render the traditional move record (pairs of Red/Black moves per row).
+  // Auto-scrolls to the most recent ply.
+  renderMoveRecord() {
+    const list = document.getElementById('move-record-list');
+    if (!list) return;
+    const moves = Array.isArray(this.moves) ? this.moves : [];
+    let html = '';
+    for (let i = 0; i < moves.length; i += 2) {
+      const no = (i / 2) + 1;
+      const redMv = moves[i] || '';
+      const blackMv = moves[i + 1] || '';
+      html += `<div class="mv-row"><span class="mv-no">${no}.</span>`
+            + `<span class="mv-red">${redMv}</span>`
+            + `<span class="mv-black">${blackMv}</span></div>`;
+    }
+    list.innerHTML = html;
+    list.scrollTop = list.scrollHeight;
+  }
+
+  // Show the online player names bar and mark which side is "you".
+  // redName/blackName are display strings; mySide is 'red'|'black'|'spectator'.
+  renderPlayerNames(redName, blackName, mySide) {
+    const bar = document.getElementById('player-name-bar');
+    const redEl = document.getElementById('name-red');
+    const blackEl = document.getElementById('name-black');
+    if (!bar) return;
+    bar.classList.remove('hidden');
+    if (redEl) {
+      redEl.textContent = redName ? `紅 ${redName}` : '紅方';
+      redEl.classList.toggle('me', mySide === 'red');
+    }
+    if (blackEl) {
+      blackEl.textContent = blackName ? `黑 ${blackName}` : '黑方';
+      blackEl.classList.toggle('me', mySide === 'black');
+    }
+  }
+
   render() {
     this.renderer.resize();
     const inCheck = isInCheck(this.board, this.turn);
@@ -306,7 +355,7 @@ function normalizeHistory(rawHistory) {
   } else if (Array.isArray(rawHistory)) {
     rawHistory.forEach(v => { if (v) list.push(v); });
   }
-  return list
+    return list
     .filter(s => s && s.board)
     .map(s => ({
       board: normalizeBoard(s.board),
@@ -314,6 +363,22 @@ function normalizeHistory(rawHistory) {
       lastMove: s.lastMove || null,
       moveCount: s.moveCount || 0
     }));
+}
+
+// Firebase turns sparse/array values into objects with string numeric keys.
+// Rebuild the notation list into an ordered array of strings.
+function normalizeMoves(rawMoves) {
+  if (!rawMoves) return [];
+  if (Array.isArray(rawMoves)) return rawMoves.filter(v => typeof v === 'string');
+  if (typeof rawMoves === 'object') {
+    return Object.keys(rawMoves)
+      .map(k => ({ k, idx: Number(k) }))
+      .filter(e => !Number.isNaN(e.idx))
+      .sort((a, b) => a.idx - b.idx)
+      .map(e => rawMoves[e.k])
+      .filter(v => typeof v === 'string');
+  }
+  return [];
 }
 
 // A lightweight, non-blocking toast for short feedback messages ("已發送請求…").
@@ -355,6 +420,14 @@ export function initOnlineChessGame(roomData, userId, role) {
 
       this.isFixedFlipped = (this.role === 'black');
 
+      // Show the opponent/player name bar + move record panels (online only).
+      const redName = (room && room.redPlayer && room.redPlayer.name) || null;
+      const blackName = (room && room.blackPlayer && room.blackPlayer.name) || null;
+      this.renderPlayerNames(redName, blackName, this.role);
+      const recPanel = document.getElementById('move-record-panel');
+      if (recPanel) recPanel.classList.remove('hidden');
+      this.renderMoveRecord();
+
       // 1. 強制確保 DOM 畫布存在並設置尺寸
       this.canvas = document.getElementById('chess-board');
       this.ctx = this.canvas.getContext('2d');
@@ -385,26 +458,31 @@ export function initOnlineChessGame(roomData, userId, role) {
           if (state.turn) this.turn = state.turn;
                     this.lastMove = state.lastMove || null;
                     this.moveCount = state.moveCount || 0;
-                    // Keep local undo history in sync with what is stored online.
+                                        // Keep local undo history in sync with what is stored online.
                     this._stateHistory = normalizeHistory(state.history);
+                    // Move record (traditional notation) — authoritative list.
+                    this.moves = normalizeMoves(state.moves);
 
                                         // Reflect a shared result (win/lose/draw) so BOTH players AND
           // spectators see the same ending, then return everyone to the room.
           if (state.result) {
             this.applySharedResult(state.result);
-          } else {
+                    } else {
             this.checkGameState();
           }
+          this.renderMoveRecord();
           this.render();
         } else if (!this.stateWritten) {
           // 若無對局資料，由紅方或房主初始化寫入預設棋盤
           if (this.role === 'red' || this.role === 'host') {
             this.stateWritten = true;
-            set(gameStateRef, {
+                        set(gameStateRef, {
               board: this.board,
               turn: this.turn,
               lastMove: null,
-              moveCount: 0
+              moveCount: 0,
+              history: [],
+              moves: []
             }).catch(err => console.error('初始化線上棋盤失敗：', err));
           }
         }
@@ -442,12 +520,13 @@ export function initOnlineChessGame(roomData, userId, role) {
 
             const db = getDatabase();
       const gameStateRef = ref(db, `rooms/${this.roomId}/gameState`);
-      const payload = {
+            const payload = {
         board: this.board,
         turn: this.turn,
         lastMove: this.lastMove,
         moveCount: this.moveCount,
-        history
+        history,
+        moves: this.moves
       };
       // If this move ended the game, persist the result in the SAME write so it
       // is never clobbered by a later set().
@@ -703,28 +782,31 @@ export function initOnlineChessGame(roomData, userId, role) {
             return;
           }
 
-          set(gameStateRef, {
+                    set(gameStateRef, {
             board: restored.board,
             turn: restored.turn,
             lastMove: restored.lastMove || null,
             moveCount: restored.moveCount || 0,
-            history: working
+            history: working,
+            // Keep the move record consistent with the restored position.
+            moves: normalizeMoves(state.moves).slice(0, restored.moveCount || 0)
           }).then(() => this.setRequestStatus(req, 'accepted'))
             .catch(err => console.error('悔棋套用失敗：', err));
         }).catch(err => console.error('讀取對局狀態失敗：', err));
 
             } else if (req.type === 'restart') {
         const fresh = getInitialBoard();
-        set(gameStateRef, {
+                set(gameStateRef, {
           board: fresh,
           turn: RED,
           lastMove: null,
           moveCount: 0,
-          history: []
+          history: [],
+          moves: []
         }).then(() => this.setRequestStatus(req, 'accepted'))
           .catch(err => console.error('重開套用失敗：', err));
 
-      } else if (req.type === 'draw') {
+            } else if (req.type === 'draw') {
         get(gameStateRef).then(snap => {
           const state = snap.exists() ? snap.val() : {};
           set(gameStateRef, {
@@ -732,6 +814,8 @@ export function initOnlineChessGame(roomData, userId, role) {
             turn: state.turn || this.turn,
             lastMove: state.lastMove || null,
             moveCount: state.moveCount || 0,
+            // Preserve the move record so it stays visible during the draw overlay.
+            moves: normalizeMoves(state.moves),
             result: 'draw'
           }).then(() => this.setRequestStatus(req, 'accepted'))
             .catch(err => console.error('和棋套用失敗：', err));
