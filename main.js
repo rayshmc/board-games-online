@@ -55,11 +55,16 @@ async function launchChineseChessLocalPvP() {
   // Local hotseat is not an online board: drop the online-only layout class.
   document.body.classList.remove('online-chess');
 
-    // Hide online-only UI (player names + move record) when playing locally.
+        // Hide online-only UI (player names + move record) when playing locally.
     const nameBar = document.getElementById('player-name-bar');
     const recPanel = document.getElementById('move-record-panel');
+    const specBanner = document.getElementById('spectator-banner');
+    const sideColumn = document.getElementById('online-side-column');
     if (nameBar) nameBar.classList.add('hidden');
     if (recPanel) recPanel.classList.add('hidden');
+    if (specBanner) specBanner.classList.add('hidden');
+    // Spectator list + chat room only exist for online matches.
+    if (sideColumn) sideColumn.classList.add('hidden');
 
     // 認輸 / 和棋 only exist for online games.
     ['btn-surrender', 'btn-draw'].forEach(id => {
@@ -129,7 +134,22 @@ btnBackMenu.addEventListener('click', () => {
   } else if (!onlineLobbySection.classList.contains('hidden')) {
     showChessModeMenu();
   } else if (!chessSection.classList.contains('hidden')) {
-    showChessModeMenu();
+    // An ONLINE board: "返回" goes back to the room browser (lobby list)
+    // instead of the mode menu. Leaving mid-game releases the seat and marks
+    // the room waiting again, exactly like the in-room 返回 button does.
+    if (activeChessGame && activeChessGame.roomId) {
+      if (typeof window.__teardownOnlineChess === 'function') {
+        try { window.__teardownOnlineChess(); } catch (e) { /* ignore */ }
+      }
+      window.__teardownOnlineChess = null;
+      activeChessGame = null;
+      const hook = window.__leaveOnlineRoom;
+      if (typeof hook === 'function') hook();
+      showOnlineLobby();
+    } else {
+      // Local hotseat keeps the original behaviour.
+      showChessModeMenu();
+    }
   } else {
     showMainLobby();
   }

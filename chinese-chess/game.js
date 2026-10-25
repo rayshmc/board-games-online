@@ -3,6 +3,7 @@ import { getInitialBoard, isValidMoveStrict, isInCheck, getAllLegalMoves, RED, B
 import { BoardRenderer } from './board.js';
 import { sounds } from './audio.js';
 import { moveToNotation } from './notation.js';
+import { ChatPanel, SpectatorList } from './chat.js';
 
 class GameController {
   constructor() {
@@ -264,6 +265,9 @@ class GameController {
   }
 
   updateStatus(customMsg = null, type = null) {
+    // Keep the name-bar turn marker in sync with every status change (normal
+    // turn switch, check, or a finished game).
+    this.updatePlayerTurnHighlight();
     if (customMsg) {
       this.turnIndicator.textContent = customMsg;
       this.turnIndicator.className = type === 'check' ? 'turn check' : 'turn winner';
@@ -315,7 +319,7 @@ class GameController {
     const redEl = document.getElementById('name-red');
     const blackEl = document.getElementById('name-black');
     if (!bar) return;
-    bar.classList.remove('hidden');
+        bar.classList.remove('hidden');
     if (redEl) {
       redEl.textContent = redName ? `紅 ${redName}` : '紅方';
       redEl.classList.toggle('me', mySide === 'red');
@@ -324,6 +328,20 @@ class GameController {
       blackEl.textContent = blackName ? `黑 ${blackName}` : '黑方';
       blackEl.classList.toggle('me', mySide === 'black');
     }
+    this.updatePlayerTurnHighlight();
+  }
+
+  // Make it obvious whose turn it is in the online name bar: the side on move
+  // gets a "▶" marker + pulsing glow in its colour. Harmless in local mode
+  // (the bar is hidden there, so the class toggle is invisible) and after the
+  // game ends (both sides are cleared).
+  updatePlayerTurnHighlight() {
+    const redEl = document.getElementById('name-red');
+    const blackEl = document.getElementById('name-black');
+    if (!redEl || !blackEl) return;
+    const active = this.isGameOver ? null : this.turn;
+    redEl.classList.toggle('turn-active', active === RED);
+    blackEl.classList.toggle('turn-active', active === BLACK);
   }
 
   render() {
@@ -456,13 +474,27 @@ export function initOnlineChessGame(roomData, userId, role) {
 
       this.isFixedFlipped = (this.role === 'black');
 
+      // Clearly tell spectators that they are only watching (they cannot move).
+      const specBanner = document.getElementById('spectator-banner');
+      if (specBanner) {
+        if (this.role === 'spectator') {
+          specBanner.textContent = '旁觀模式：您正在觀戰，無法走棋';
+          specBanner.classList.remove('hidden');
+        } else {
+          specBanner.classList.add('hidden');
+        }
+      }
+
       // Show the opponent/player name bar + move record panels (online only).
       const redName = (room && room.redPlayer && room.redPlayer.name) || null;
       const blackName = (room && room.blackPlayer && room.blackPlayer.name) || null;
-      this.renderPlayerNames(redName, blackName, this.role);
+            this.renderPlayerNames(redName, blackName, this.role);
       const recPanel = document.getElementById('move-record-panel');
       if (recPanel) recPanel.classList.remove('hidden');
       this.renderMoveRecord();
+
+            // Live spectator list + shared chat room beside the board.
+      this.initLiveSidePanels(room, redName, blackName);
 
       // 1. 強制確保 DOM 畫布存在並設置尺寸
       this.canvas = document.getElementById('chess-board');
@@ -476,12 +508,49 @@ export function initOnlineChessGame(roomData, userId, role) {
       requestAnimationFrame(() => this.render());
       setTimeout(() => this.render(), 60);
 
-      // 4. 綁定即時資料庫同步
+            // 4. 綁定即時資料庫同步
       this.initRealtimeSync();
       this.initOnlineActions();
     }
 
-        initRealtimeSync() {
+        // Mount the two live side widgets next to the board:
+    //   1) the spectator list ("旁觀者 N") so players/spectators see who is
+    //      watching WHILE the match is in progress (the room view's list is
+    //      hidden once the board opens), and
+    //   2) the chat panel: ONE shared channel that players and spectators post
+    //      to alike, with a 紅 / 黑 / 觀 badge on each message.
+    // Both subscribe to rooms/{roomId} and are destroyed in teardown().
+    initLiveSidePanels(room, redName, blackName) {
+      const column = document.getElementById('online-side-column');
+      if (column) column.classList.remove('hidden');
+
+      // Display name for chat messages: prefer the name handed over by
+      // online.js, then fall back to the seat we occupy.
+      const myName = (room && room.username)
+        || (this.role === 'red' ? redName : null)
+        || (this.role === 'black' ? blackName : null)
+        || '旁觀者';
+
+      this._spectatorList = new SpectatorList({
+        roomId: this.roomId,
+        userId: this.userId
+      });
+      this._spectatorList.mount({
+        listEl: document.getElementById('live-spectator-list'),
+        countEl: document.getElementById('live-spectator-count'),
+        emptyText: '目前沒有旁觀者'
+      });
+
+      this._chatPanel = new ChatPanel({
+        roomId: this.roomId,
+        userId: this.userId,
+                username: myName,
+        role: this.role
+      });
+      this._chatPanel.mount(document.getElementById('live-chat-mount'));
+    }
+
+    initRealtimeSync() {
           const db = getDatabase();
           const gameStateRef = ref(db, `rooms/${this.roomId}/gameState`);
           this._unsubscribers = this._unsubscribers || [];
@@ -667,10 +736,24 @@ export function initOnlineChessGame(roomData, userId, role) {
       // Drop the DOM listeners installed by the online controller (canvas click,
       // resize, and the onclick handlers on the request buttons) so a returning
       // local game does not fire two controllers at once.
-      ['btn-restart', 'btn-undo', 'btn-surrender', 'btn-draw'].forEach(id => {
+            ['btn-restart', 'btn-undo', 'btn-surrender', 'btn-draw'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.onclick = null;
       });
+
+      // Detach the live spectator / chat listeners so a closed board cannot
+      // keep writing to (or hearing from) the room.
+      if (this._chatPanel) {
+        this._chatPanel.destroy();
+        this._chatPanel = null;
+      }
+      if (this._spectatorList) {
+        this._spectatorList.destroy();
+        this._spectatorList = null;
+      }
+      const sideColumn = document.getElementById('online-side-column');
+      if (sideColumn) sideColumn.classList.add('hidden');
+
       super.teardown();
       this.clearOverlay();
     }

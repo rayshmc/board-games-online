@@ -119,8 +119,17 @@ export class BoardRenderer {
     this.ctx.clearRect(0, 0, width, height);
     this.drawGrid(isFlipped);
 
-    if (lastMove) {
-      this.highlightCell(lastMove.from, 'rgba(255, 235, 59, 0.35)', isFlipped);
+        if (lastMove) {
+      // Origin square of the last move. The old half-transparent yellow was
+      // almost invisible on the tan board, so it now uses a contrasting
+      // translucent blue filled circle with a thin dark outline; the
+      // destination keeps the yellow marker.
+      this.highlightCell(
+        lastMove.from,
+        'rgba(41, 182, 246, 0.5)',
+        isFlipped,
+        'rgba(13, 71, 161, 0.9)'
+      );
       this.highlightCell(lastMove.to, 'rgba(255, 235, 59, 0.5)', isFlipped);
     }
 
@@ -139,12 +148,25 @@ export class BoardRenderer {
     }
   }
 
-  highlightCell(cell, color, isFlipped) {
+      // Fill one intersection. `strokeColor` is optional and draws a thin (dark by
+  // convention) outline around the same circle so it stays visible on tiles of
+  // any colour.
+  highlightCell(cell, color, isFlipped, strokeColor = null) {
     const { x, y } = this.getCoords(cell.row, cell.col, isFlipped);
+    const radius = this.cellSize * 0.44;
+
     this.ctx.beginPath();
-    this.ctx.arc(x, y, this.cellSize * 0.44, 0, Math.PI * 2);
+    this.ctx.arc(x, y, radius, 0, Math.PI * 2);
     this.ctx.fillStyle = color;
     this.ctx.fill();
+
+    if (strokeColor) {
+      this.ctx.beginPath();
+      this.ctx.arc(x, y, radius, 0, Math.PI * 2);
+      this.ctx.strokeStyle = strokeColor;
+      this.ctx.lineWidth = Math.max(1, this.cellSize * 0.03);
+      this.ctx.stroke();
+    }
   }
 
   drawSelectionRing(cell, isFlipped) {

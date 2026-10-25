@@ -171,16 +171,15 @@ body {
   }
 }
 
-/* ONLINE mode: the wrapper hosts BOTH the board (9:10) and the side move-record
-   panel, so give it extra width to let the board scale up without squeezing the
-   record panel. Increased the base height and add more width for better desktop
-   experience. */
+/* ONLINE mode: the wrapper hosts the board (9:10) plus TWO side panels (the
+   move record and the spectator list + chat column), so give it extra width to
+   let the board scale up without squeezing them. */
 body.online-chess .game-wrapper {
-  max-width: max(440px, min(1280px, calc((100vh - 220px) * 0.95 + 260px)));
+  max-width: max(440px, min(1500px, calc((100vh - 220px) * 0.95 + 520px)));
 }
 @supports (height: 100dvh) {
   body.online-chess .game-wrapper {
-    max-width: max(440px, min(1280px, calc((100dvh - 220px) * 0.95 + 260px)));
+    max-width: max(440px, min(1500px, calc((100dvh - 220px) * 0.95 + 520px)));
   }
 }
 
@@ -493,6 +492,89 @@ body.online-chess #btn-surrender:active:not(:disabled) {
   font-weight: bold;
 }
 
+/* Current user is not seated: make "you are only watching" unmistakable. */
+.spectator-notice {
+  margin-top: 8px;
+  font-size: 1rem;
+  font-weight: bold;
+  color: #9fd6ff;
+  background: rgba(21, 101, 192, 0.25);
+  border: 1px solid #1565c0;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+/* Spectator list panel inside the room view. */
+.spectator-panel {
+  margin-top: 16px;
+  background: #2b3a2a;
+  border: 1px solid #4a6348;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.spectator-panel-title {
+  font-size: 1.05rem;
+  font-weight: bold;
+  color: #ffd700;
+  margin-bottom: 10px;
+}
+
+.spectator-count {
+  display: inline-block;
+  min-width: 22px;
+  padding: 1px 8px;
+  margin-left: 4px;
+  border-radius: 10px;
+  background: #1565c0;
+  color: #fff;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.spectator-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 1rem;
+  color: #d1e0d0;
+}
+
+.spectator-empty {
+  color: #9aa79a;
+}
+
+.spectator-chip {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #3b5039;
+  border: 1px solid #4a6348;
+  color: #eaf3ea;
+  font-weight: bold;
+}
+
+.spectator-chip.me {
+  border-color: #ffd700;
+  color: #ffd700;
+}
+
+/* Banner shown over the online board so spectators know they cannot act. */
+.spectator-banner {
+  margin-top: 8px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  background: rgba(21, 101, 192, 0.3);
+  border: 1px solid #1565c0;
+  color: #cfe6ff;
+  font-size: 1rem;
+  font-weight: bold;
+  text-align: center;
+}
+.spectator-banner.hidden {
+  display: none;
+}
+
 /* 彈窗樣式 */
 .modal {
   position: fixed;
@@ -598,6 +680,222 @@ body.online-chess #btn-surrender:active:not(:disabled) {
 }
 /* #endregion */
 
+/* #region CELL 10: 聊天室 (房內單一頻道) 與對局中旁觀名單 */
+.chat-mount {
+  width: 100%;
+  min-width: 0;
+}
+
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid #5c4033;
+  border-radius: 8px;
+}
+
+/* ONE channel for the whole room, so the header is a plain title bar. */
+.chat-title {
+  padding: 9px 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid #5c4033;
+  color: #ffd700;
+  font-size: 1rem;
+  font-weight: bold;
+}
+
+/* 紅 / 黑 / 觀 badge in front of each sender's name. */
+.chat-role {
+  display: inline-block;
+  min-width: 18px;
+  margin-right: 6px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  line-height: 18px;
+  text-align: center;
+  vertical-align: 1px;
+}
+
+.chat-role.red {
+  background: rgba(211, 47, 47, 0.35);
+  color: #ff8a80;
+}
+
+.chat-role.black {
+  background: rgba(77, 182, 172, 0.28);
+  color: #80cbc4;
+}
+
+.chat-role.spectator {
+  background: rgba(255, 255, 255, 0.12);
+  color: #cfd8cf;
+}
+
+/* Chat text must stay selectable even though the global reset disables it. */
+.chat-messages {
+  flex: 1 1 auto;
+  min-height: 110px;
+  max-height: 30vh;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: #eaf3ea;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.chat-msg {
+  word-break: break-word;
+}
+
+.chat-msg .chat-author {
+  margin-right: 6px;
+  font-weight: bold;
+  color: #ffd700;
+}
+
+.chat-msg.me .chat-author {
+  color: #9fd6ff;
+}
+
+.chat-msg .chat-time {
+  margin-left: 6px;
+  font-size: 0.75rem;
+  color: #8a9a8a;
+}
+
+.chat-empty {
+  color: #9aa79a;
+  text-align: center;
+  margin: auto 0;
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid #5c4033;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.chat-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #4a6348;
+  border-radius: 6px;
+  background: #2b3a2a;
+  color: #fff;
+  font-size: 0.95rem;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.chat-send {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  background: #d32f2f;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.chat-send:hover {
+  background: #b71c1c;
+}
+
+.chat-hint {
+  padding: 4px 10px 8px;
+  font-size: 0.78rem;
+  color: #9aa79a;
+  text-align: center;
+}
+
+/* Room view (對局桌) gives the chat a fixed, comfortable height. */
+.online-lobby-wrapper .chat-panel {
+  max-height: 340px;
+}
+
+/* Live board: right-hand column holding the spectator list + chat. */
+.online-side-column {
+  flex: 0 0 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  max-height: 62vh;
+}
+
+.online-side-column.hidden {
+  display: none;
+}
+
+.live-spectator-panel {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid #5c4033;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.side-panel-title {
+  margin-bottom: 8px;
+  font-size: 1rem;
+  font-weight: bold;
+  color: #ffd700;
+}
+
+.online-side-column .spectator-list {
+  max-height: 92px;
+  overflow-y: auto;
+  font-size: 0.95rem;
+}
+
+.online-side-column .chat-panel {
+  flex: 1 1 auto;
+}
+
+
+
+
+
+
+
+
+@media (max-width: 1100px) {
+  .online-side-column {
+    flex: 0 0 210px;
+  }
+  .chat-title {
+    font-size: 0.95rem;
+  }
+}
+
+/* Narrow screens: drop the side column below the board and let it breathe. */
+@media (max-width: 900px) {
+  .board-and-record {
+    flex-wrap: wrap;
+  }
+  .online-side-column {
+    flex: 1 1 100%;
+    max-height: none;
+  }
+  .chat-messages {
+    max-height: 26vh;
+  }
+}
+/* #endregion */
+
 /* #region CELL 9: 小螢幕 (手機) 相容性調整 */
 /* Compact chrome on small phones so the scaled-up board + request buttons
    still fit without horizontal scrolling, while keeping >=44px tap targets. */
@@ -640,6 +938,7 @@ body.online-chess #btn-surrender:active:not(:disabled) {
   padding: 4px 14px;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.35);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 .player-name-bar .red-side { color: #ff5252; }
 .player-name-bar .black-side { color: #4db6ac; }
@@ -651,6 +950,37 @@ body.online-chess #btn-surrender:active:not(:disabled) {
   content: '（你）';
   font-size: 0.85rem;
   color: #ffd700;
+}
+
+/* Whose turn is it? The gold outline above only marks which side is "you", so
+   the side that is ON MOVE additionally gets a "▶" marker plus a pulsing glow
+   in its own colour. An inset ring is used (not an outline) so it never fights
+   the gold "you" outline when the same side is both yours and on move. */
+.player-name-bar .pname.turn-active {
+  animation: turnPulse 1.5s ease-in-out infinite;
+}
+.player-name-bar .pname.turn-active::before {
+  content: '▶';
+  margin-right: 6px;
+  font-size: 0.9em;
+  color: #ffd700;
+}
+.player-name-bar .red-side.turn-active {
+  background: rgba(211, 47, 47, 0.45);
+  box-shadow: 0 0 14px rgba(255, 82, 82, 0.8), inset 0 0 0 2px #ff5252;
+}
+.player-name-bar .black-side.turn-active {
+  background: rgba(77, 182, 172, 0.3);
+  box-shadow: 0 0 14px rgba(77, 182, 172, 0.85), inset 0 0 0 2px #4db6ac;
+}
+
+@keyframes turnPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-name-bar .pname.turn-active { animation: none; }
 }
 
 .board-and-record {

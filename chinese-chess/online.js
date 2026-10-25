@@ -2,6 +2,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getDatabase, ref, set, get, push, remove, onValue, update, onDisconnect, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 import { getInitialBoard, RED } from './rules.js';
+import { ChatPanel, SpectatorList } from './chat.js';
 
 const firebaseConfig = {
   databaseURL: "https://board-games-online-65a0c-default-rtdb.asia-southeast1.firebasedatabase.app"
@@ -18,6 +19,13 @@ let currentRoomId = null;
 let roomUnsubscribe = null;
 let myRole = null;
 let isTabActive = true;
+
+// Room / spectator bookkeeping -------------------------------------------
+// Are we currently listed in rooms/{id}/spectators? Guards against writing the
+// same registration over and over on every re-render.
+let spectatorEntryActive = false;
+// Stable join time so the spectator list keeps a sensible, non-jittery order.
+let spectatorJoinedAt = null;
 
 // Identify the player. This MUST be unique per page load / tab. Storing it in
 // localStorage shares one id across the whole profile, and even sessionStorage
@@ -69,9 +77,13 @@ async function fallbackNameIsUnique(name) {
     const snapshot = await get(ref(db, 'online_users'));
     if (!snapshot.exists()) return true;
     let unique = true;
+    const now = Date.now();
     snapshot.forEach(child => {
       const userData = child.val();
-      if (child.key !== myUserId && userData && userData.username === name) {
+      // Ignore stale presence nodes (kept around for room retention) and our
+      // own node — only a genuinely live player blocks the name.
+      if (child.key !== myUserId && userData && userData.username === name &&
+          now - (userData.lastSeen || 0) < ONLINE_WINDOW_MS) {
         unique = false;
       }
     });
@@ -147,6 +159,9 @@ function goToRoomView() {
 document.addEventListener('visibilitychange', () => {
   isTabActive = !document.hidden;
   updatePresenceStatus();
+  // Coming back to the tab must also refresh the room we are in, so a brief
+  // absence never lets the room look idle to the stale-room cleanup.
+  if (isTabActive && currentRoomId) touchCurrentRoom(currentRoomId);
 });
 
 export function initOnlineLobby() {
@@ -355,10 +370,33 @@ function renderRoomView(roomId, room) {
   // be false and we will NOT relaunch a new board by accident.
   const bothSeated = !!(red && black && red.id !== black.id);
   const matchLive = bothSeated && room.status === 'playing';
+
+  // Keep our own spectator registration in sync with the seat state: seated
+  // players are NOT spectators, everyone else in the room is.
+  const iAmSeated = !!(red && red.id === myUserId) || !!(black && black.id === myUserId);
+  setSpectatorEntry(roomId, !iAmSeated);
+  renderSpectatorNotice(iAmSeated, matchLive);
+
+  // Chat room (one shared channel for the whole room). While a board is live it
+  // carries its own chat panel beside the board, so the room's panel is released
+  // to avoid two sets of listeners on the same messages.
+  const myChatRole = (red && red.id === myUserId)
+    ? 'red'
+    : (black && black.id === myUserId ? 'black' : 'spectator');
+  if (matchLive) {
+    destroyRoomChat();
+  } else {
+    ensureRoomChat(roomId, myChatRole, currentUsername);
+  }
+
   if (tipEl) {
-    tipEl.textContent = bothSeated
-      ? '雙方已就座，開始對局！'
-      : '請選擇您的陣營以開始對局...';
+    if (bothSeated) {
+      tipEl.textContent = iAmSeated
+        ? '雙方已就座，開始對局！'
+        : '對局進行中，您正在旁觀此局。';
+    } else {
+      tipEl.textContent = '請選擇您的陣營以開始對局...';
+    }
   }
 
   if (matchLive) {
@@ -376,6 +414,98 @@ function renderRoomView(roomId, room) {
   }
 }
 
+// Register / unregister this client in the room's spectator list. Called from
+// renderRoomView so the list always matches the current seat state, with an
+// internal guard so repeated renders do not spam the database.
+function setSpectatorEntry(roomId, active) {
+  if (!roomId || !currentUsername) return;
+  if (active) {
+    if (spectatorEntryActive) return;
+    spectatorEntryActive = true;
+    const specRef = ref(db, `rooms/${roomId}/spectators/${myUserId}`);
+    set(specRef, {
+      name: currentUsername,
+      joinedAt: spectatorJoinedAt || Date.now(),
+      lastSeen: Date.now()
+    }).catch(err => console.error('登記旁觀者失敗：', err));
+    // If this tab vanishes, drop it from the list without waiting for cleanup.
+    onDisconnect(specRef).remove();
+  } else {
+    if (!spectatorEntryActive) return;
+    spectatorEntryActive = false;
+    remove(ref(db, `rooms/${roomId}/spectators/${myUserId}`)).catch(() => {});
+  }
+}
+
+// Draw the "you are only watching" notice in the room view. The list itself is
+// rendered by the shared SpectatorList component (mounted in enterRoom), so the
+// room view and the live board share one implementation.
+function renderSpectatorNotice(iAmSeated, matchLive) {
+  const noticeEl = document.getElementById('spectator-notice');
+  if (!noticeEl) return;
+
+  if (iAmSeated) {
+    noticeEl.classList.add('hidden');
+  } else {
+    noticeEl.classList.remove('hidden');
+    noticeEl.textContent = matchLive
+      ? '您正在旁觀此局（未入座），無法走棋。'
+      : '您目前在旁觀席，選擇紅方或黑方即可加入對戰。';
+  }
+}
+
+// The spectator list inside the room view (旁觀者 N).
+let roomSpectatorList = null;
+
+function mountRoomSpectatorList(roomId) {
+  if (!roomId) return;
+  if (!roomSpectatorList) {
+    roomSpectatorList = new SpectatorList({ roomId, userId: myUserId, staleMs: ROOM_STALE_MS });
+  }
+  roomSpectatorList.mount({
+    listEl: document.getElementById('spectator-list'),
+    countEl: document.getElementById('spectator-count'),
+    emptyText: '目前沒有旁觀者'
+  });
+}
+
+function destroyRoomSpectatorList() {
+  if (roomSpectatorList) {
+    roomSpectatorList.destroy();
+    roomSpectatorList = null;
+  }
+}
+
+// The chat panel inside the room view (one shared channel for everyone).
+let roomChatPanel = null;
+let roomChatRole = null;
+
+function ensureRoomChat(roomId, role, username) {
+  if (!roomId) return;
+  const mountEl = document.getElementById('room-chat-mount');
+  if (!mountEl) return;
+
+  if (!roomChatPanel) {
+    roomChatPanel = new ChatPanel({ roomId, userId: myUserId, username, role });
+    roomChatPanel.mount(mountEl);
+    roomChatRole = role;
+    return;
+  }
+  // Keep the identity badge / hint in step when we take or leave a seat.
+  if (roomChatRole !== role) {
+    roomChatPanel.setRole(role);
+    roomChatRole = role;
+  }
+}
+
+function destroyRoomChat() {
+  if (roomChatPanel) {
+    roomChatPanel.destroy();
+    roomChatPanel = null;
+    roomChatRole = null;
+  }
+}
+
 async function startOnlineMatch(roomId, room, role) {
   // Guard against starting twice (renderRoomView can fire repeatedly).
   if (window.__onlineMatchStarted === roomId + ':' + role) return;
@@ -386,11 +516,15 @@ async function startOnlineMatch(roomId, room, role) {
   document.body.classList.add('online-chess');
 
   try {
+    // Pass our display name along so the board's chat can tag our messages
+    // (spectators are not part of room.redPlayer/blackPlayer, so it cannot be
+    // derived from the room object alone).
+    const payload = { roomId, username: currentUsername, ...room };
     if (typeof window.__launchOnlineChess === 'function') {
-      await window.__launchOnlineChess({ roomId, ...room }, myUserId, role);
+      await window.__launchOnlineChess(payload, myUserId, role);
     } else {
       const { launchOnlineChess } = await import('./main.js');
-      await launchOnlineChess({ roomId, ...room }, myUserId, role);
+      await launchOnlineChess(payload, myUserId, role);
     }
   } catch (err) {
     console.error('啟動線上對局失敗：', err);
@@ -497,6 +631,8 @@ function joinSeat(color) {
     updates.status = opponentPresent ? 'playing' : 'waiting';
 
     myRole = color;
+    // Once seated we are a player, not a spectator.
+    setSpectatorEntry(currentRoomId, false);
     update(roomRef, updates).catch(err => {
       console.error('入座寫入失敗（可能是 Firebase 寫入規則限制）：', err);
       alert('入座失敗，請確認 Firebase 允許寫入 rooms。');
@@ -520,6 +656,16 @@ function handleLeaveRoom(skipNavigation = false) {
   currentRoomId = null;
   myRole = null;
 
+  // Leave the spectator list before releasing the seat below.
+  if (roomId && spectatorEntryActive) {
+    remove(ref(db, `rooms/${roomId}/spectators/${myUserId}`)).catch(() => {});
+  }
+  spectatorEntryActive = false;
+
+  // Drop the room view's live widgets along with their Firebase listeners.
+  destroyRoomChat();
+  destroyRoomSpectatorList();
+
   // Release any seat we held, and delete the room if we were its host and
   // it would be left empty. This makes rooms disappear promptly on leave.
   if (roomId) {
@@ -531,10 +677,21 @@ function handleLeaveRoom(skipNavigation = false) {
       if (room.redPlayer && room.redPlayer.id === myUserId) updates.redPlayer = null;
       if (room.blackPlayer && room.blackPlayer.id === myUserId) updates.blackPlayer = null;
 
+      // If I walked out mid-match, the game is no longer "playing": a seat is
+      // now empty, so put the table back to waiting instead of leaving it
+      // listed as 對戰中 for everyone else.
+      if (updates.redPlayer === null || updates.blackPlayer === null) {
+        updates.status = 'waiting';
+      }
+
+      // Other people still watching keep the room alive even if the host leaves.
+      const otherSpectators = Object.keys(room.spectators || {}).filter(uid => uid !== myUserId);
+
       const willBeEmpty =
         (room.hostId === myUserId) &&
         !room.blackPlayer &&
-        (!room.redPlayer || room.redPlayer.id === myUserId);
+        (!room.redPlayer || room.redPlayer.id === myUserId) &&
+        otherSpectators.length === 0;
 
       if (willBeEmpty) {
         return remove(roomRef);
@@ -553,21 +710,41 @@ function handleLeaveRoom(skipNavigation = false) {
 function enterRoom(roomId) {
   currentRoomId = roomId;
   myRole = null;
+  spectatorEntryActive = false;
+  spectatorJoinedAt = Date.now();
   window.__onlineMatchStarted = null;
   goToRoomView();
   attachRoomListener(roomId);
   startRoomHeartbeat(roomId);
+  // Register ourselves as a spectator right away; if we take a seat the room
+  // listener / joinSeat will remove us from the list again.
+  setSpectatorEntry(roomId, true);
+  // Live spectator list + chat panel for this room.
+  mountRoomSpectatorList(roomId);
+  ensureRoomChat(roomId, 'spectator', currentUsername);
 }
 
 // While a player is inside a room, keep its lastInteraction fresh so the
 // stale-room cleanup doesn't remove a room that's legitimately waiting.
 let roomHeartbeat = null;
+
+// Refresh the room's activity timestamp (and our spectator heartbeat) so the
+// stale-room cleanup keeps a room that still has a live participant.
+function touchCurrentRoom(roomId) {
+  if (!roomId || currentRoomId !== roomId) return;
+  update(ref(db, `rooms/${roomId}`), { lastInteraction: Date.now() }).catch(() => {});
+  if (currentUsername && spectatorEntryActive) {
+    update(ref(db, `rooms/${roomId}/spectators/${myUserId}`), {
+      name: currentUsername,
+      joinedAt: spectatorJoinedAt || Date.now(),
+      lastSeen: Date.now()
+    }).catch(() => {});
+  }
+}
+
 function startRoomHeartbeat(roomId) {
   stopRoomHeartbeat();
-  const touch = () => {
-    if (currentRoomId !== roomId) return;
-    update(ref(db, `rooms/${roomId}`), { lastInteraction: Date.now() }).catch(() => {});
-  };
+  const touch = () => touchCurrentRoom(roomId);
   touch();
   roomHeartbeat = setInterval(touch, 10000);
 }
@@ -622,9 +799,11 @@ let lobbyListenersAttached = false;
 let lobbyRoomsUnsub = null;
 let lobbyUsersUnsub = null;
 
-const ONLINE_WINDOW_MS = 20000;      // a user is "online" if seen within this window
-const ROOM_CREATE_GRACE_MS = 8000;   // don't delete a brand-new room before host presence syncs
-const ROOM_STALE_MS = 25000;         // room idle longer than this with no seated online player is removed
+const ONLINE_WINDOW_MS = 20000;         // a user counts as "online" (badge) if seen within this window
+const PRESENCE_RETENTION_MS = 60000;    // keep the presence node longer so room retention can read lastSeen
+const ROOM_OWNER_GRACE_MS = 30000;      // a room stays while any participant was seen within 30s
+const ROOM_CREATE_GRACE_MS = 8000;      // don't delete a brand-new room before host presence syncs
+const ROOM_STALE_MS = 30000;            // room idle longer than this with no present participant is removed
 
 function initLobbyListeners() {
   const container = document.getElementById('room-list-container');
@@ -645,10 +824,13 @@ function initLobbyListeners() {
     const removedUids = [];
 
     Object.keys(users).forEach(uid => {
-      if (now - (users[uid].lastSeen || 0) < ONLINE_WINDOW_MS) {
+      const lastSeen = users[uid].lastSeen || 0;
+      if (now - lastSeen < ONLINE_WINDOW_MS) {
         activeOnlineCount++;
-      } else {
-        // 清除過期的使用者紀錄
+      } else if (now - lastSeen > PRESENCE_RETENTION_MS) {
+        // Keep the presence node a little longer than the "online" window so
+        // room retention can still read lastSeen during the 30s grace period.
+        // 清除過期（超過保留期）的使用者紀錄
         removedUids.push(uid);
         remove(ref(db, `online_users/${uid}`)).catch(() => {});
       }
@@ -695,23 +877,35 @@ function cleanAndRenderRooms(snapshot, users, now, container) {
 
   let visibleRooms = 0;
 
+  // A player counts as "still here" for room retention if they were seen within
+  // the 30s grace window (covers a brief tab switch / reload / network blip).
+  const isPresent = (user) => !!(user && now - (user.lastSeen || 0) < ROOM_OWNER_GRACE_MS);
+
   snapshot.forEach(child => {
     const room = child.val();
     const roomId = child.key;
 
-    const redOnline = room.redPlayer && users[room.redPlayer.id] && (now - (users[room.redPlayer.id].lastSeen || 0) < ONLINE_WINDOW_MS);
-    const blackOnline = room.blackPlayer && users[room.blackPlayer.id] && (now - (users[room.blackPlayer.id].lastSeen || 0) < ONLINE_WINDOW_MS);
-    const hostOnline = room.hostId && users[room.hostId] && (now - (users[room.hostId].lastSeen || 0) < ONLINE_WINDOW_MS);
+    const redPresent = !!(room.redPlayer && isPresent(users[room.redPlayer.id]));
+    const blackPresent = !!(room.blackPlayer && isPresent(users[room.blackPlayer.id]));
+    const hostPresent = !!(room.hostId && isPresent(users[room.hostId]));
+
+    // Spectators are players too: a live spectator keeps the room alive.
+    const spectators = room.spectators || {};
+    const spectatorCount = Object.keys(spectators).filter(uid => {
+      const s = spectators[uid] || {};
+      return isPresent(users[uid]) || (now - (s.lastSeen || 0) < ROOM_OWNER_GRACE_MS);
+    }).length;
 
     const createdRecently = now - (room.lastInteraction || 0) < ROOM_CREATE_GRACE_MS;
     const roomStale = now - (room.lastInteraction || 0) > ROOM_STALE_MS;
 
-    // Delete a room only when NOBODY associated with it is online anymore
-    // (no seated player AND the host is offline), and it has had time to be seen.
-    // This keeps a host's waiting room alive while they are connected, but
-    // removes rooms whose owner has gone offline / closed the tab.
-    const nobodyOnline = !redOnline && !blackOnline && !hostOnline;
-    if (!createdRecently && nobodyOnline && roomStale) {
+    // Keep a room as long as ANY associated player (host, seated player or
+    // spectator) has been seen within the grace window. It is only removed once
+    // nobody has been seen for 30s AND the room itself has been idle for 30s,
+    // so switching tabs or a quick reload never wipes a room out from under its
+    // owner.
+    const nobodyPresent = !redPresent && !blackPresent && !hostPresent && spectatorCount === 0;
+    if (!createdRecently && nobodyPresent && roomStale) {
       remove(ref(db, `rooms/${roomId}`)).catch(err => {
         console.error('刪除無人對局桌失敗（可能是 Firebase 寫入規則限制）：', err);
       });
@@ -720,15 +914,16 @@ function cleanAndRenderRooms(snapshot, users, now, container) {
 
     visibleRooms++;
 
-    const redName = redOnline ? room.redPlayer.name : '等待加入';
-    const blackName = blackOnline ? room.blackPlayer.name : '等待加入';
+    const redName = redPresent ? room.redPlayer.name : '等待加入';
+    const blackName = blackPresent ? room.blackPlayer.name : '等待加入';
+    const statusText = room.status === 'waiting' ? '尋覓對手中' : '對戰中';
 
     const item = document.createElement('div');
     item.className = 'room-item';
     item.innerHTML = `
       <div>
         <strong>${room.roomName}</strong>
-        <div style="font-size:0.85rem; color:#ccc;">紅：${redName} | 黑：${blackName} | 狀態：${room.status === 'waiting' ? '尋覓對手中' : '對戰中'}</div>
+        <div style="font-size:0.85rem; color:#ccc;">紅：${redName} | 黑：${blackName} | 狀態：${statusText} | 旁觀：${spectatorCount}</div>
       </div>
       <button class="btn-primary" data-room-id="${roomId}">進入對局桌</button>
     `;
@@ -744,7 +939,6 @@ function cleanAndRenderRooms(snapshot, users, now, container) {
 
 async function createNewRoom() {
   let newRoomRef;
-  let disconnectCleanupRegistered = false;
   try {
     const roomsRef = ref(db, 'rooms');
     const snapshot = await get(roomsRef);
@@ -775,8 +969,10 @@ async function createNewRoom() {
     newRoomRef = push(roomsRef);
     currentRoomId = newRoomRef.key;
 
-    await onDisconnect(newRoomRef).remove();
-    disconnectCleanupRegistered = true;
+    // NOTE: deliberately do NOT hard-delete the room on disconnect. Doing so
+    // wiped a room the instant its host switched tabs or reloaded. The room is
+    // instead kept for the 30s grace and removed by cleanAndRenderRooms once
+    // every participant has been gone for longer than that.
     await set(newRoomRef, {
       roomName: `對局桌 #${tableNumberStr}`,
       hostId: myUserId,
@@ -790,13 +986,6 @@ async function createNewRoom() {
     // After a successful create, go straight into the room view.
     enterRoom(currentRoomId);
   } catch (err) {
-    if (disconnectCleanupRegistered) {
-      try {
-        await onDisconnect(newRoomRef).cancel();
-      } catch (cancelError) {
-        console.error('取消對局桌斷線清理失敗：', cancelError);
-      }
-    }
     currentRoomId = null;
     console.error('建立對局桌失敗：', err);
     alert('建立對局桌失敗，請稍後再試。');

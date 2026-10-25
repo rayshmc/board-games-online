@@ -13,7 +13,7 @@
       <div class="logo-area" id="btn-home">
         <h2>線上棋類大廳</h2>
       </div>
-      <button id="btn-back-menu" class="btn-secondary hidden">返回大廳</button>
+      <button id="btn-back-menu" class="btn-secondary hidden">返回</button>
     </header>
 <!-- #endregion -->
 
@@ -113,9 +113,22 @@
           </div>
         </div>
 
-        <div class="room-status-row">
+                <div class="room-status-row">
           <p id="room-status-tip">請選擇您的陣營以開始對局...</p>
+          <p id="spectator-notice" class="spectator-notice hidden"></p>
         </div>
+
+        <!-- 旁觀者名單：列出目前在房內但未入座的玩家 -->
+        <div class="spectator-panel">
+          <div class="spectator-panel-title">
+            旁觀者 <span id="spectator-count" class="spectator-count">0</span>
+          </div>
+                    <div id="spectator-list" class="spectator-list">目前沒有旁觀者</div>
+        </div>
+
+
+                <!-- 聊天室：全房共用一個頻道，紅方、黑方與旁觀者都能發言（UI 由 chat.js 建立） -->
+        <div class="chat-mount" id="room-chat-mount"></div>
       </div>
     </section>
 
@@ -150,11 +163,15 @@
           <div class="status-bar">
             <span id="turn-indicator" class="turn red">紅方走棋</span>
           </div>
-          <!-- Online player name bar (hidden in local mode) -->
+                    <!-- Online player name bar (hidden in local mode) -->
           <div id="player-name-bar" class="player-name-bar hidden">
             <span id="name-red" class="pname red-side">紅方</span>
             <span class="pname vs">VS</span>
             <span id="name-black" class="pname black-side">黑方</span>
+          </div>
+          <!-- Spectator indicator (online only): clearly tells onlookers they cannot move -->
+          <div id="spectator-banner" class="spectator-banner hidden">
+            旁觀模式：您正在觀戰，無法走棋
           </div>
         </div>
 
@@ -163,10 +180,21 @@
             <canvas id="chess-board"></canvas>
           </div>
 
-          <!-- Traditional move record (中式記譜) -->
+                    <!-- Traditional move record (中式記譜) -->
           <div id="move-record-panel" class="move-record-panel hidden">
             <div class="move-record-title">棋譜記錄</div>
             <div id="move-record-list" class="move-record-list"></div>
+          </div>
+
+          <!-- 對局進行中：旁觀名單 + 聊天室（僅線上對局顯示，由 chat.js 建立 UI） -->
+          <div id="online-side-column" class="online-side-column hidden">
+            <div class="live-spectator-panel">
+              <div class="side-panel-title">
+                旁觀者 <span id="live-spectator-count" class="spectator-count">0</span>
+              </div>
+              <div id="live-spectator-list" class="spectator-list">目前沒有旁觀者</div>
+            </div>
+            <div class="chat-mount" id="live-chat-mount"></div>
           </div>
         </div>
 
